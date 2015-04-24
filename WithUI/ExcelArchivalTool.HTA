@@ -1,0 +1,257 @@
+<head>
+<title>Excel Archival Tool</title>
+
+<HTA: APPLICATION
+	APPLICATIONNAME="Excel Archival Tool"
+	SCROLL="yes"
+	SINGLEINSTANCE="yes"
+	WINDOWSTATE="maximize"
+>
+
+</head>
+
+
+<script language="javascript">
+
+
+aboutClick = function() {
+	var wind = window.showModalDialog("License.html","", "status:0;scroll:1;resizable:1;dialogWidth:700px;dialogHeight:600px");
+}
+
+
+
+function window_onLoad() {
+	window.resizeTo(750, 420);
+	window.moveTo(screen.availWidth/4, screen.availHeight/3);
+}
+
+window.onload = window_onLoad;
+
+
+</script>
+
+
+<script language="VBScript">
+	Dim Source
+	Dim DestinationFolder
+	Dim return
+	Dim pauser
+
+
+	' Initiate and assign File/Folder System objects
+	Set fso = CreateObject("Scripting.FileSystemObject")
+
+	Private Function getFileCount(folderPath)
+		Set folder = fso.GetFolder(folderPath)
+		count = 0
+		For each file in folder.Files
+			If LCase(fso.GetExtensionName(file)) = "xls" Or LCase(fso.GetExtensionName(file)) = "xlsx" Then
+				count = count + 1
+			End If
+		Next
+		For each subFolder in folder.SubFolders
+			count = count + getFileCount(subFolder.path)
+		Next
+		getFileCount = count
+	End Function
+
+
+	Sub getSource
+		' Select a single Excel file or a folder that contains Excel files 
+		'myStartLocation = "C:\Users"
+		'blnSimpleDialong = False
+
+
+		Const WINDOW_HANDLE = 0  'Must ALWAYS be 0
+
+		Dim numOptions, objFolder, objFolderItem
+		Dim objPath, objShell, strPath, strPrompt
+
+		' Set the options for the dialog window
+		strPrompt = "Select single Excel file or a directory containing Excel files:"
+
+		' Option = 16384 allows selection of a single file or a folder
+		numOptions = 16384
+
+    
+		' Create a Windows Shell object
+		Set objShell = CreateObject( "Shell.Application" )  
+
+		strPath = myStartLocation
+
+		' Enter strPath (myStartLocation) as fourth argument if you'd like to be prompted from a different folder (default is desktop)
+		Set objSource = objShell.BrowseForFolder( WINDOW_HANDLE, strPrompt, _
+                                              numOptions )
+
+		' Print file/folder name to UI if one is selected
+		If Not (objSource Is Nothing) Then
+			Set objSourceItem = objSource.Self
+			Source = objSourceItem.Path
+			sourceArea.innerHTML = "<br>" & Source
+			messageArea.innerHTML = ""
+
+			If fso.FolderExists(Source) Then
+				fileCountArea.innerHTML = getFileCount(Source) & " Excel file(s) found<br>"
+			ElseIf fso.FileExists(Source) Then
+				fileCountArea.innerHTML = "Single file selected<br>"
+			End If
+		End If
+
+	End Sub
+
+
+	Sub getDestFolder
+		' Select folder that contains Excel files
+		myStartLocation = "C:\Users"
+		blnSimpleDialong = False
+
+
+		Const WINDOW_HANDLE = 0 ' Must ALWAYS be 0
+
+		Dim numOptions, objFolder, objFolderItem
+		Dim objPath, objShell, strPath, strPrompt
+
+		' Set the options for the dialog window
+		strPrompt = "Select folder where converted files will go:"
+
+		numOptions = 0      ' Simple dialog
+
+    
+		' Create a Windows Shell object
+		Set objShell = CreateObject( "Shell.Application" )  
+
+		strPath = myStartLocation
+
+		' Enter strPath (myStartLocation) as fourth argument if you'd like to be prompted from a different folder (default is desktop)
+		Set objFolder = objShell.BrowseForFolder( WINDOW_HANDLE, strPrompt, _
+                                              numOptions )
+
+		' Quit if no folder was selected
+		If Not (objFolder Is Nothing) Then
+			Set objFolderItem = objFolder.Self
+			DestinationFolder = objFolderItem.Path
+			destArea.innerHTML = "<br>" & DestinationFolder
+			messageArea.innerHTML = ""
+		End If
+
+	End Sub
+
+
+	Sub startScript
+
+		If CheckForExcelProcess() Then
+			Msgbox "Please close Excel before proceeding"
+			Exit Sub
+		End If
+
+		If Not IsEmpty(Source) And Not IsEmpty(DestinationFolder) Then
+			If (fso.FolderExists(Source) Or fso.FileExists(Source)) And fso.FolderExists(DestinationFolder) Then
+
+				Set objShell = CreateObject("Wscript.Shell")
+				objShell.Run(".\ToolLogic.vbs " & chr(34) & Source & chr(34) & " " & chr(34) & DestinationFolder & chr(34)_
+						 	& " " & raw.checked & " " & cellform.checked & " " & figs.checked & " " & html.checked)
+				
+				messageArea.innerHTML = "Processing " & Source & "..."
+				
+				Sleep 1000				
+
+				Do Until Not CheckForExcelProcess()
+					Sleep 500
+				Loop
+
+				messageArea.innerHTML = "Conversion Complete"
+				
+				' Opens destination folder upon completion of script
+				objShell.Run("explorer /e, " & DestinationFolder)
+
+				sourceArea.innerHTML = ""
+				destArea.innerHTML = ""
+				fileCountArea.innerHTML = ""
+				Source = Empty
+				DestinationFolder = Empty
+				fso.DeleteFile("sleeper.vbs")
+			End If
+		ElseIf IsEmpty(Source) And IsEmpty(DestinationFolder) Then
+			messageArea.innerHTML = "Please select both a source (folder or file) and a desination folder"
+		ElseIf IsEmpty(DestinationFolder) Then
+			messageArea.innerHTML = "Please select a desintation folder"
+		Else
+			messageArea.innerHTML = "Please select a source folder or a single Excel file"
+		End If
+	End Sub
+
+
+	' Sub taken as-is from "Fredledingue" at http://www.visualbasicscript.com/Sleep-in-HTA-not-a-dream-anymore-m48600.aspx 23-10-2014
+	Sub Sleep(MSecs) 
+
+  		If Fso.FileExists("sleeper.vbs")=False Then
+  			Set objOutputFile = fso.CreateTextFile("sleeper.vbs", True)
+			objOutputFile.Write "wscript.sleep WScript.Arguments(0)"
+  			objOutputFile.Close
+ 		End If
+ 		CreateObject("WScript.Shell").Run "sleeper.vbs " & MSecs,1 , True
+
+	End Sub
+
+
+	' Function paraphrased from http://technet.microsoft.com/en-us/library/ee692601.aspx 23-10-2014
+	Private Function CheckForExcelProcess()
+	
+        	strComputer = "."
+
+	        Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
+        	Set colProcesses = objWMIService.ExecQuery("Select * from Win32_Process")
+
+
+	        For Each objProcess in colProcesses
+        		If LCase(objProcess.Name) = "excel.exe" Then
+				CheckForExcelProcess = True
+				Exit Function
+		    	End If
+	        Next
+
+		CheckForExcelProcess = False
+	
+	End Function
+
+
+
+
+</script>
+
+<body BGCOLOR = "lightblue">
+<div style="width:100%; height:80%; position:absolute; vertical-align:middle; text-align:center; padding-top:3%;">
+	<input type="button" value="Select Source" name="sourceButton" onClick="VBScript:getSource" style="width:16em">
+	<span id="sourceArea"></span>
+	<br>
+	<span id="fileCountArea"></span>
+	<br>
+	<input type="button" value="Select Destination Folder" name="destButton" onClick="VBScript:getDestFolder" style="width:16em">
+	<span id="destArea"></span>
+	<br><br><br>
+</div>
+
+
+<div style="position:absolute; width:100%; height:80%; text-align:left; padding-left:35%; padding-top:23%">
+	<strong>Select your desired outputs:</strong><br>
+	&nbsp;&nbsp;&nbsp;<input type="checkbox" id="raw" name="rawData" value="dataBox" checked>Raw Spreadsheet Data (.csv)<br>
+	&nbsp;&nbsp;&nbsp;<input type="checkbox" id="cellform" name="formula" value="formulaBox" checked>Cell Formulas (.txt)<br>
+	&nbsp;&nbsp;&nbsp;<input type="checkbox" id="figs" name="chartsImages" value="chartBox" checked>Charts and Figures (.png)<br>
+	&nbsp;&nbsp;&nbsp;<input type="checkbox" id="html" name="formatting" value="htmlBox" checked>Visual Representation (.html)<br>
+</div>
+
+<div style="width:100%; height:80%; position:absolute; vertical-align:middle; text-align:center; padding-top:36%;">
+
+	<br>
+	<input type="button" value="Begin" name="startButton" onClick="VBScript:startScript" style="width:16em">
+	<br>
+	<span id="messageArea"></span>
+	<br><br><br>
+</div>
+
+<div style="position:absolute; bottom:5px; width:100%; vertical-align:middle; text-align:center; ">
+	<button id="aboutButton" style="color:blue; font-size:0.6em; background:none; border:none;" onclick="javascript:aboutClick()">Licensed under GNU GPLv3 (Click here for license)<br>University of Minnesota-Twin Cities Libraries</button>
+</div>
+
+</body>
+
